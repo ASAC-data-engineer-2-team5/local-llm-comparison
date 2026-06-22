@@ -142,38 +142,14 @@ check_gpu
 echo ""
 
 # ============================================================
-# Phase 2: 컨텍스트 없이 한국어 이해 테스트
+# 질문 정의
 # ============================================================
-echo "=== Phase 2: 컨텍스트 없이 한국어 이해 테스트 ==="
-
 P2_QUESTIONS=(
   "Q2-1|연차유급휴가를 사용하려면 며칠 전에 신청해야 하나요?"
   "Q2-2|3년 이상 근속한 직원은 연차가 기본 15일에서 어떻게 가산되나요?"
   "Q2-3|직장 내 괴롭힘을 당했을 때 어떻게 신고해야 하나요?"
   "Q2-4|회사 구내식당 이용 시간과 메뉴는 어떻게 확인하나요?"
 )
-
-for MODEL in "${MODELS[@]}"; do
-  echo ""
-  echo ">>> 모델: $MODEL"
-  warmup_model "$MODEL"
-  check_model_gpu
-  for Q in "${P2_QUESTIONS[@]}"; do
-    QID="${Q%%|*}"
-    QUESTION="${Q##*|}"
-    # printf로 실제 줄바꿈 처리 (\n 리터럴 버그 수정)
-    PROMPT=$(printf "당신은 사내 규정 안내 챗봇입니다. 다음 질문에 간결하게 답해주세요. 모르는 내용은 모른다고 명확히 말해주세요.\n\n질문: %s" "$QUESTION")
-    RESULT=$(call_ollama "$MODEL" "$PROMPT")
-    save_result "$MODEL" "Phase2" "$QID" "$QUESTION" "$RESULT"
-  done
-  unload_model "$MODEL"
-done
-
-# ============================================================
-# Phase 3: RAG 시뮬레이션 (규정 문서 주입)
-# ============================================================
-echo ""
-echo "=== Phase 3: RAG 시뮬레이션 (규정 문서 주입) ==="
 
 P3_QUESTIONS=(
   "Q3-1|채용 공고는 최소 며칠 이상 게시해야 하나요?"
@@ -185,27 +161,6 @@ P3_QUESTIONS=(
   "Q3-7|상사의 지시가 위법하다고 판단될 때 어떻게 해야 하나요?"
   "Q3-8|야근 수당 지급 기준은 어떻게 되나요?"
 )
-
-for MODEL in "${MODELS[@]}"; do
-  echo ""
-  echo ">>> 모델: $MODEL"
-  warmup_model "$MODEL"
-  check_model_gpu
-  for Q in "${P3_QUESTIONS[@]}"; do
-    QID="${Q%%|*}"
-    QUESTION="${Q##*|}"
-    PROMPT=$(printf "당신은 사내 규정 안내 챗봇입니다. 아래 제공된 사내 규정만을 근거로 질문에 답하세요. 규정에 명시되지 않은 내용은 반드시 '해당 내용은 규정에 명시되어 있지 않습니다'라고 답하세요.\n\n[사내 규정]\n%s\n\n질문: %s" "$REGULATION" "$QUESTION")
-    RESULT=$(call_ollama "$MODEL" "$PROMPT")
-    save_result "$MODEL" "Phase3" "$QID" "$QUESTION" "$RESULT"
-  done
-  unload_model "$MODEL"
-done
-
-# ============================================================
-# Phase 4: JSON 구조화 출력 (일관성 테스트)
-# ============================================================
-echo ""
-echo "=== Phase 4: JSON 구조화 출력 테스트 ==="
 
 JSON_PROMPT='다음 직원 질문을 분석하여 반드시 JSON 형식으로만 반환하세요. 다른 텍스트는 절대 포함하지 마세요.
 
@@ -220,15 +175,44 @@ JSON_PROMPT='다음 직원 질문을 분석하여 반드시 JSON 형식으로만
   "urgency": "high/medium/low"
 }'
 
+# ============================================================
+# 모델별로 Phase 2 → 3 → 4 순서로 실행 (VRAM 1회 로드/언로드)
+# ============================================================
 for MODEL in "${MODELS[@]}"; do
   echo ""
-  echo ">>> 모델: $MODEL (${JSON_REPEAT}회 반복 - 일관성 확인)"
+  echo "========================================"
+  echo "  모델: $MODEL"
+  echo "========================================"
   warmup_model "$MODEL"
   check_model_gpu
+
+  # --- Phase 2: 컨텍스트 없이 한국어 이해 ---
+  echo "  [Phase 2] 한국어 이해 테스트"
+  for Q in "${P2_QUESTIONS[@]}"; do
+    QID="${Q%%|*}"
+    QUESTION="${Q##*|}"
+    PROMPT=$(printf "당신은 사내 규정 안내 챗봇입니다. 다음 질문에 간결하게 답해주세요. 모르는 내용은 모른다고 명확히 말해주세요.\n\n질문: %s" "$QUESTION")
+    RESULT=$(call_ollama "$MODEL" "$PROMPT")
+    save_result "$MODEL" "Phase2" "$QID" "$QUESTION" "$RESULT"
+  done
+
+  # --- Phase 3: RAG 시뮬레이션 ---
+  echo "  [Phase 3] RAG 시뮬레이션"
+  for Q in "${P3_QUESTIONS[@]}"; do
+    QID="${Q%%|*}"
+    QUESTION="${Q##*|}"
+    PROMPT=$(printf "당신은 사내 규정 안내 챗봇입니다. 아래 제공된 사내 규정만을 근거로 질문에 답하세요. 규정에 명시되지 않은 내용은 반드시 '해당 내용은 규정에 명시되어 있지 않습니다'라고 답하세요.\n\n[사내 규정]\n%s\n\n질문: %s" "$REGULATION" "$QUESTION")
+    RESULT=$(call_ollama "$MODEL" "$PROMPT")
+    save_result "$MODEL" "Phase3" "$QID" "$QUESTION" "$RESULT"
+  done
+
+  # --- Phase 4: JSON 구조화 출력 ---
+  echo "  [Phase 4] JSON 구조화 출력 (${JSON_REPEAT}회)"
   for ((i=1; i<=JSON_REPEAT; i++)); do
     RESULT=$(call_ollama "$MODEL" "$JSON_PROMPT")
     save_result "$MODEL" "Phase4" "Q4-$i" "JSON 구조화 출력 (${i}회차)" "$RESULT"
   done
+
   unload_model "$MODEL"
 done
 
