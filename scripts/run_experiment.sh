@@ -20,7 +20,7 @@ SSH="ssh -i $SSH_KEY -o StrictHostKeyChecking=no $EC2_USER@$EC2_IP"
 SCP="scp -i $SSH_KEY -o StrictHostKeyChecking=no"
 
 REPO_URL=$(git -C "$SCRIPT_DIR" remote get-url origin 2>/dev/null)
-REPO_NAME=$(basename "$REPO_URL" .git)
+REPO_DIR="/home/ubuntu/EUNBEE2/local-llm-comparison"
 RESULTS_DIR="$SCRIPT_DIR/../results"
 
 echo "=== 실험 환경 ==="
@@ -32,12 +32,13 @@ echo ""
 # 1. EC2에서 git clone 또는 git pull
 echo ">>> [1/3] EC2에서 코드 동기화 중..."
 $SSH "
-  if [ ! -d ~/$REPO_NAME ]; then
+  if [ ! -d $REPO_DIR ]; then
     echo '    git clone 실행 중...'
-    git clone $REPO_URL ~/$REPO_NAME
+    mkdir -p /home/ubuntu/EUNBEE2
+    git clone $REPO_URL $REPO_DIR
   else
     echo '    git pull 실행 중...'
-    git -C ~/$REPO_NAME pull
+    git -C $REPO_DIR pull
   fi
 "
 echo "    코드 동기화 완료"
@@ -47,7 +48,7 @@ echo ""
 echo ">>> [2/3] EC2에서 실험 실행 중..."
 echo "    (모델 수 × 전체 질문 = 약 30~60분 소요)"
 echo ""
-$SSH "export LANG=ko_KR.UTF-8 LC_ALL=ko_KR.UTF-8 EXPERIMENT_ENV=ec2; chmod +x ~/$REPO_NAME/experiments/experiment.sh && bash ~/$REPO_NAME/experiments/experiment.sh"
+$SSH "export LANG=ko_KR.UTF-8 LC_ALL=ko_KR.UTF-8 EXPERIMENT_ENV=ec2; chmod +x $REPO_DIR/experiments/experiment.sh && bash $REPO_DIR/experiments/experiment.sh"
 
 # 3. 결과 파일 로컬로 가져오기
 echo ""
