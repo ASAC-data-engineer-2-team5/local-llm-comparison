@@ -64,6 +64,15 @@ check_model_gpu() {
   fi
 }
 
+# 모델 언로드 함수 — 다음 모델 로드 전 VRAM 확보
+unload_model() {
+  local MODEL=$1
+  echo "  (VRAM에서 언로드 중: $MODEL)"
+  curl -s --max-time 10 "$OLLAMA_API/api/generate" \
+    -H "Content-Type: application/json" \
+    -d "{\"model\": \"$MODEL\", \"keep_alive\": 0}" > /dev/null
+}
+
 # 워밍업 함수 — 모델을 VRAM에 미리 올려서 첫 질문 속도 왜곡 방지
 warmup_model() {
   local MODEL=$1
@@ -157,6 +166,7 @@ for MODEL in "${MODELS[@]}"; do
     RESULT=$(call_ollama "$MODEL" "$PROMPT")
     save_result "$MODEL" "Phase2" "$QID" "$QUESTION" "$RESULT"
   done
+  unload_model "$MODEL"
 done
 
 # ============================================================
@@ -188,6 +198,7 @@ for MODEL in "${MODELS[@]}"; do
     RESULT=$(call_ollama "$MODEL" "$PROMPT")
     save_result "$MODEL" "Phase3" "$QID" "$QUESTION" "$RESULT"
   done
+  unload_model "$MODEL"
 done
 
 # ============================================================
@@ -218,6 +229,7 @@ for MODEL in "${MODELS[@]}"; do
     RESULT=$(call_ollama "$MODEL" "$JSON_PROMPT")
     save_result "$MODEL" "Phase4" "Q4-$i" "JSON 구조화 출력 (${i}회차)" "$RESULT"
   done
+  unload_model "$MODEL"
 done
 
 echo ""
