@@ -24,6 +24,10 @@ echo ""
 cp "$EXPERIMENTS_DIR/sample_regulation.txt" "$HOME/sample_regulation.txt"
 cp "$EXPERIMENTS_DIR/experiment_config.sh"  "$HOME/experiment_config.sh"
 
+# Python UTF-8 강제 설정 (Windows CP949 인코딩 문제 방지)
+export PYTHONIOENCODING=utf-8
+export PYTHONUTF8=1
+
 # 실험 실행 (localhost 사용하도록 환경변수 오버라이드)
 EXPERIMENT_ENV=local OLLAMA_ENDPOINT="http://localhost:11434" bash "$EXPERIMENTS_DIR/experiment.sh"
 
