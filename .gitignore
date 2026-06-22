@@ -1,0 +1,8 @@
+# 자격증명
+.env
+*.pem
+*.ppk
+
+# 실험 결과
+results/*.csv
+results/*.md
